@@ -1,0 +1,6 @@
+[submodule "openssl"]
+	path = openssl
+	url = git://github.com/openssl/openssl.git
+[submodule "excons"]
+	path = excons
+	url = git://github.com/gatgui/excons.git

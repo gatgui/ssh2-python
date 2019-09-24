@@ -6,3 +6,10 @@ build
 *.so
 .idea/
 ssh2/libssh2.so*
+
+/.build/
+/release/
+/debug/
+/*.dblite
+/excons.cache
+/*.cmake.*
