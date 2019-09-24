@@ -4,6 +4,9 @@ import glob
 import excons
 import excons.tools.python
 
+# Note: tested with cmake 3.13.5 or cython 0.29.13
+#       failed with cmake 2.8.12.2 (broken FindOpenSSL.cmake)
+
 mscver = ARGUMENTS.get("mscver", "9.0")
 
 env = excons.MakeBaseEnv()
@@ -86,15 +89,27 @@ else:
       if ssh2_static:
          excons.Link(env, LibSSLPath(), static=openssl_static, force=True, silent=True)
          excons.Link(env, LibCryptoPath(), static=openssl_static, force=True, silent=True)
-         env.Append(LIBS=["ws2_32", "advapi32", "crypt32", "user32"])
+         if sys.platform == "win32":
+            env.Append(LIBS=["ws2_32", "advapi32", "crypt32", "user32"])
+
+   def VersionScript(env):
+      if sys.platform == "darwin":
+         pass
+      elif sys.platform == "win32":
+         pass
+      else:
+         env.Append(LINKFLAGS=" -Wl,--version-script=%s" % os.path.abspath("ssh2/ssh2.version"))
 
    prjs = [{"name": "libssh2",
             "type": "cmake",
             "cmake-root": "libssh2",
-            "cmake-opts": {"BUILD_SHARED_LIBS": "ON",
+            "cmake-opts": {"BUILD_SHARED_LIBS": 1,
                            "CRYPTO_BACKEND": "OpenSSL",
                            "OPENSSL_ROOT_DIR": out_dir,
-                           "OPENSSL_USE_STATIC_LIBS": ("TRUE" if openssl_static else "FALSE")},
+                           "BUILD_EXAMPLES": 0,
+                           "BUILD_TESTING": 0,
+                           "CMAKE_INSTALL_LIBDIR": out_dir + "/lib",
+                           "OPENSSL_USE_STATIC_LIBS": (1 if openssl_static else 0)},
             "cmake-cfgs": excons.CollectFiles(["libssh2"], patterns=["CMakeLists.txt"], recursive=True),
             "cmake-srcs": excons.CollectFiles(["libssh2/src"], patterns=["*.c"], recursive=True),
             "cmake-outputs": map(lambda x: out_incdir + "/" + os.path.basename(x), excons.glob("libssh2/include/*.h")) +
@@ -109,7 +124,8 @@ else:
              "ext": excons.tools.python.ModuleExtension(),
              "prefix": prefix,
              "srcs": [c],
-             "custom": [RequireLibSSH2, excons.tools.python.SoftRequire]}
+             "symvis": "default",
+             "custom": [VersionScript, RequireLibSSH2, excons.tools.python.SoftRequire]}
       prjs.append(prj)
 
    # Main target: ssh2
@@ -117,10 +133,19 @@ else:
    deps = [x["name"] for x in prjs]
    insts = ["ssh2/__init__.py",
             "ssh2/_version.py"]
-   if sys.platform == "win32" and not ssh2_static:
-      dll = os.path.join(out_bindir + "/libssh2.dll")
-      if os.path.isfile(dll):
-         insts.append(dll)
+   if not ssh2_static:
+      if sys.platform == "win32":
+         dll = os.path.join(out_bindir + "/libssh2.dll")
+         if os.path.isfile(dll):
+            insts.append(dll)
+      elif sys.platform == "darwin":
+         dylib = os.path.join(out_libdir + "/libssh2.1.dylib")
+         if os.path.isfile(dylib):
+            insts.append(dylib)
+      else:
+         so = os.path.join(out_libdir + "/libssh2.so.1")
+         if os.path.isfile(so):
+            insts.append(so)
 
    prjs.append({"name": "ssh2",
                 "type": "install",
